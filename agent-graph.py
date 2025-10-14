@@ -181,7 +181,9 @@ print("="*80)
 
 # result = graph("list logs for EKS cluster sliverblaze and find any errors")
 # result = graph("find EKS cluster nodes")
-result = graph("list EKS clusters")
+# result = graph("list EKS clusters")
+result = graph("find any issues with EKS cluster sliverblaze")
+
 # result = graph("find any errors in pod logs in flix-finder namespace")
 
 # print("="*80)
