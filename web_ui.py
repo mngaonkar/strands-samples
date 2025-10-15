@@ -226,22 +226,38 @@ When decomposing tasks, consider which tools will be needed and structure sub-ta
             if hasattr(graph_result, 'execution_order') and graph_result.execution_order:
                 # Get the last execution result (should be from result_aggregator)
                 last_execution = graph_result.execution_order[-1]
-                if hasattr(last_execution, 'result'):
-                    return str(last_execution.result)
+                if hasattr(last_execution, 'result') and hasattr(last_execution.result, 'result'):
+                    # Access the AgentResult within NodeResult
+                    agent_result = last_execution.result.result
+                    if hasattr(agent_result, 'message') and 'content' in agent_result.message:
+                        return str(agent_result.message['content'][-1]['text'])
+            
+            # Try to get result from results dictionary using the correct agent name
+            if hasattr(graph_result, 'results') and 'result_aggregator' in graph_result.results:
+                node_result = graph_result.results['result_aggregator']
+                if hasattr(node_result, 'result') and hasattr(node_result.result, 'message'):
+                    return str(node_result.result.message['content'][-1]['text'])
             
             # If the result is a string, return it directly
             if isinstance(graph_result, str):
                 return graph_result
-            
-            # If the result has a 'result' attribute, use that
-            if hasattr(graph_result, 'result'):
-                return str(graph_result.result)
             
             # Fallback to string representation
             return str(graph_result)
             
         except Exception as e:
             logger.warning(f"Could not extract final result: {e}")
+            # More detailed fallback - try to find any content in the result
+            try:
+                if hasattr(graph_result, 'results') and not isinstance(graph_result, str):
+                    for agent_name, node_result in graph_result.results.items():
+                        if hasattr(node_result, 'result') and hasattr(node_result.result, 'message'):
+                            if 'content' in node_result.result.message:
+                                logger.info(f"Using result from agent: {agent_name}")
+                                return str(node_result.result.message['content'][-1]['text'])
+            except Exception as fallback_error:
+                logger.warning(f"Fallback extraction also failed: {fallback_error}")
+            
             return str(graph_result)
 
 def main():
