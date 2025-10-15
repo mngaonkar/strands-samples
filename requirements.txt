@@ -11,3 +11,7 @@ boto3
 # Configuration
 python-dotenv
 pyyaml
+
+# Development
+streamlit
+plotly
