@@ -101,7 +101,34 @@ class StrandsAgentManager:
             except Exception as e:
                 logger.warning(f"Could not load MCP tools: {e}")
                 self.mcp_tools_loaded = False
-    
+
+    def process_event(self, **kwargs):
+        self.event_handler_func(kwargs)
+
+    def event_handler_func(self, event):
+        """Shared event processor for both async iterators and callback handlers"""
+        if event.get("init_event_loop", False):
+            print("🔄 Event loop initialized")
+        elif event.get("start_event_loop", False):
+            print("▶️ Event loop cycle starting")
+        elif "message" in event:
+            print(f"📬 New message created: {event['message']['role']}")
+        elif event.get("complete", False):
+            print("✅ Cycle completed")
+        elif event.get("force_stop", False):
+            print(f"🛑 Event loop force-stopped: {event.get('force_stop_reason', 'unknown reason')}")
+
+        # Track tool usage
+        if "current_tool_use" in event and event["current_tool_use"].get("name"):
+            tool_name = event["current_tool_use"]["name"]
+            print(f"🔧 Using tool: {tool_name}")
+            print(f"   Input: {event['current_tool_use'].get('input', {})}")
+
+        # Show text snippets
+        if "data" in event:
+            data_snippet = event["data"][:20] + ("..." if len(event["data"]) > 20 else "")
+            print(f"📟 Text: {data_snippet}")
+            
     def _build_graph(self):
         """Build the agent graph"""
         # Task decomposer agent
@@ -129,7 +156,8 @@ When decomposing tasks, consider which tools will be needed and structure sub-ta
             system_prompt=self.load_system_prompt("kubectl_command_agent.yaml") or 
                          "You are a Kubernetes command execution agent. Execute kubectl commands safely using the shell tool.",
             model="global.anthropic.claude-sonnet-4-5-20250929-v1:0",
-            tools=[shell.shell]
+            tools=[shell.shell],
+            callback_handler=self.process_event
         )
         
         # Task executor agent  
