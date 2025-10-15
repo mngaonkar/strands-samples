@@ -1,0 +1,13 @@
+# Core AI/ML frameworks
+strands-agents
+bedrock-agentcore
+strands-agents-tools
+strands-agents[anthropic]
+
+# AWS and MCP tools
+mcp
+boto3
+
+# Configuration
+python-dotenv
+pyyaml
