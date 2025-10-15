@@ -11,6 +11,7 @@ import os, sys, json, yaml, time
 from typing import List, Dict, Any
 import plotly.express as px
 import pandas as pd
+from dataclasses import dataclass
 
 # Configure page
 st.set_page_config(
@@ -27,12 +28,21 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+@dataclass
+class AgentEvent:
+    timestamp: float
+    event_type: str
+    tool_name: str = ""
+    tool_input: str = ""
+    message: str = ""
+
 class StrandsAgentManager:
     def __init__(self):
         self.graph = None
         self.mcp_client_aws_docs = None
         self.mcp_client_github = None
         self.all_tools = []
+        self.agent_events = []
         self._initialize_tools()
         self._build_graph()
     
@@ -107,28 +117,43 @@ class StrandsAgentManager:
 
     def event_handler_func(self, event):
         """Shared event processor for both async iterators and callback handlers"""
+
+        logger.info(f"Event: {event}")
+        timestamp = time.time()
+        event_type = "n/a"
+        tool_name = ""
+        tool_input = ""
+        message = ""
+
         if event.get("init_event_loop", False):
             print("🔄 Event loop initialized")
         elif event.get("start_event_loop", False):
             print("▶️ Event loop cycle starting")
         elif "message" in event:
             print(f"📬 New message created: {event['message']['role']}")
-        elif event.get("complete", False):
-            print("✅ Cycle completed")
-        elif event.get("force_stop", False):
-            print(f"🛑 Event loop force-stopped: {event.get('force_stop_reason', 'unknown reason')}")
-
+            message = json.dumps(event['message'])
+            event_type = "message"
+        
         # Track tool usage
         if "current_tool_use" in event and event["current_tool_use"].get("name"):
             tool_name = event["current_tool_use"]["name"]
+            tool_input = json.dumps(event['current_tool_use'].get('input', {}))
             print(f"🔧 Using tool: {tool_name}")
-            print(f"   Input: {event['current_tool_use'].get('input', {})}")
+            print(f"   Input: {tool_input}")
+            event_type = "tool_use"
 
         # Show text snippets
         if "data" in event:
             data_snippet = event["data"][:20] + ("..." if len(event["data"]) > 20 else "")
             print(f"📟 Text: {data_snippet}")
-            
+
+        self.agent_events.append(
+            AgentEvent(timestamp=timestamp, 
+                       event_type=event_type, 
+                       tool_name=tool_name, 
+                       tool_input=tool_input, 
+                       message=message))
+
     def _build_graph(self):
         """Build the agent graph"""
         # Task decomposer agent
@@ -384,26 +409,14 @@ def main():
     with col2:
         st.subheader("📊 Execution Status")
         
+        # Show events in real-time
         status_placeholder = st.empty()
-        progress_placeholder = st.empty()
-        
-        # Execution metrics (placeholder)
-        if st.session_state.chat_history:
-            total_queries = len(st.session_state.chat_history)
-            successful_queries = sum(1 for _, response in st.session_state.chat_history if response.get("success"))
-            
-            st.metric("Total Queries", total_queries)
-            st.metric("Success Rate", f"{(successful_queries/total_queries*100):.1f}%")
-            
-            # Simple chart
-            if total_queries > 0:
-                chart_data = pd.DataFrame({
-                    'Status': ['Success', 'Failed'],
-                    'Count': [successful_queries, total_queries - successful_queries]
-                })
-                fig = px.pie(chart_data, values='Count', names='Status', 
-                           title="Query Success Rate")
-                st.plotly_chart(fig, use_container_width=True)
+        status_placeholder.info("Awaiting query...")
+        if st.session_state.agent_manager.agent_events:
+            last_response = st.session_state.agent_manager.agent_events[-1]
+            status_placeholder.info(f"{last_response}")
+        else:
+            status_placeholder.info("No queries executed yet.")
     
     # Execute button
     if st.button("🚀 Execute Query", type="primary") and query_input.strip():
