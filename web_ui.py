@@ -256,11 +256,16 @@ class StrandsAgentManager:
         logger.info(kubectl_command_agent.system_prompt)
 
         # GitHub operations agent
+        github_tools = self.github_tools if self.github_tools else []
+        github_tools.append(shell.shell)  # Add shell tool for executing GitHub CLI commands if needed
+        logger.info(f"GitHub tools available: {[tool.tool_name for tool in github_tools]}")
+
         github_agent = Agent(
             name="github_agent",
-            system_prompt="You are a GitHub operations agent. Use GitHub MCP tools to interact with GitHub repositories, issues, pull requests, and more.",
+            system_prompt=self.load_system_prompt("system_prompt_github_agent.yaml") or
+                         "You are a GitHub operations agent. Use GitHub MCP tools to interact with GitHub repositories, issues, pull requests, and more.",
             model="global.anthropic.claude-sonnet-4-5-20250929-v1:0",
-            tools=[self.github_tools] if self.github_tools else [],
+            tools=[github_tools] if github_tools else [],
             callback_handler=self.process_event
         )
 

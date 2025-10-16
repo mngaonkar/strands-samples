@@ -17,7 +17,7 @@ system_prompt: |
     - Do not provide or infer any solutions only consolidate the command output into a summary.
     - If command fails due to syntax or other error, correct and retry 3 times till failed.
     - Do not suggest user to run commands but use shell tool to run them.
-    - Do not recommned next steps
+    - Do not recommend next steps
     - If there are multiple kubectl commands then create a one line bash command to run.
     - Always use shell tool to run kubectl commands.
 
