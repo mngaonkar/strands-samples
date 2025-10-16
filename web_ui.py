@@ -129,12 +129,11 @@ class StrandsAgentManager:
             print("🔄 Event loop initialized")
         elif event.get("start_event_loop", False):
             print("▶️ Event loop cycle starting")
-        elif "message" in event:
-            print(f"📬 New message created: {event['message']['role']}")
-            message = json.dumps(event['message'])
-            event_type = "message"
+        elif event.get("start", False):
+            print("▶️ Starting")
+
         
-        # Track tool usage
+        # Agent is invoking a tool
         if "current_tool_use" in event and event["current_tool_use"].get("name"):
             tool_name = event["current_tool_use"]["name"]
             tool_input = json.dumps(event['current_tool_use'].get('input', {}))
@@ -142,17 +141,64 @@ class StrandsAgentManager:
             print(f"   Input: {tool_input}")
             event_type = "tool_use"
 
-        # Show text snippets
+        # Agent is producing text output
         if "data" in event:
-            data_snippet = event["data"][:20] + ("..." if len(event["data"]) > 20 else "")
+            data_snippet = event["data"]
             print(f"📟 Text: {data_snippet}")
+            event_type = "text"
+            message = event["data"]
 
-        self.agent_events.append(
-            AgentEvent(timestamp=timestamp, 
-                       event_type=event_type, 
-                       tool_name=tool_name, 
-                       tool_input=tool_input, 
-                       message=message))
+        if "event" in event:
+            if "messageStart" in event["event"]:
+                message = "Message generation started"
+                event_type = "control"
+
+            if "messageStop" in event["event"]:
+                message = "Message generation ended"
+                event_type = "control"
+
+            elif "contentBlockStart" in event["event"]:
+                if "start" in event["event"]["contentBlockStart"] and "toolUse" in event["event"]["contentBlockStart"]["start"]:
+                    event_type = "tool_use"
+                    tool_name = event["event"]["contentBlockStart"]["start"]["toolUse"]["name"]
+
+                message = "Content block generation started"
+                event_type = "control"
+
+            elif "contentBlockStop" in event["event"]:
+                message = "Content block generation ended"
+                event_type = "control"
+
+            elif "contentBlockDelta" in event["event"]:
+                if "delta" in event["event"]["contentBlockDelta"] and "text" in event["event"]["contentBlockDelta"]["delta"]:
+                    event_type = "text"
+                    message = event["event"]["contentBlockDelta"]["delta"]["text"]
+                elif "delta" in event["event"]["contentBlockDelta"] and "toolUse" in event["event"]["contentBlockDelta"]["delta"]:
+                    event_type = "tool_use"
+                    tool_input = event["event"]["contentBlockDelta"]["delta"]["toolUse"]["input"]
+
+            elif "metadata" in event["event"]:
+                message = f"Metadata: {json.dumps(event['event']['metadata'])}"
+                event_type = "metadata"
+    
+        if "delta" in event:
+            if "current_tool_use" in event["delta"]:
+                tool_name = event["delta"]["current_tool_use"]["name"]
+                tool_input = event['delta']['current_tool_use']["input"]
+                event_type = "tool_use"
+            
+        if "message" in event and "role" in event["message"]:
+            message = json.dumps(event['message'])
+            event_type = "message"
+            print(f"📧 Message: {message}")
+
+        if event_type in ["message"]:
+            self.agent_events.append(
+                AgentEvent(timestamp=timestamp, 
+                        event_type=event_type, 
+                        tool_name=tool_name, 
+                        tool_input=tool_input, 
+                        message=message))
 
     def _build_graph(self):
         """Build the agent graph"""
@@ -408,22 +454,31 @@ def main():
     
     with col2:
         st.subheader("📊 Execution Status")
-        
-        # Show events in real-time
-        status_placeholder = st.empty()
-        status_placeholder.info("Awaiting query...")
-        if st.session_state.agent_manager.agent_events:
-            last_response = st.session_state.agent_manager.agent_events[-1]
-            status_placeholder.info(f"{last_response}")
-        else:
-            status_placeholder.info("No queries executed yet.")
+
+        # Add a scrollable box for events
+        event_box = st.container()
+        with event_box:
+            event_box.markdown("### Agent Events")
+            event_box.markdown("<div style='height:300px; overflow-y:auto; border:1px solid #ccc; padding:10px;'>", unsafe_allow_html=True)
+            for event in st.session_state.agent_manager.agent_events:
+                event_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(event.timestamp))
+                if event.event_type == "message":
+                    event_box.markdown(f"**[{event_time}] Message:** {event.message}")
+                elif event.event_type == "tool_use":
+                    event_box.markdown(f"**[{event_time}] Tool Use:** {event.tool_name} with input {event.tool_input}")
+                elif event.event_type == "text":
+                    event_box.markdown(f"**[{event_time}] Text:** {event.message}")
+                elif event.event_type == "n/a":
+                    continue
+            event_box.markdown("</div>", unsafe_allow_html=True)
     
     # Execute button
     if st.button("🚀 Execute Query", type="primary") and query_input.strip():
         with st.spinner('Executing query...'):
             # Progress callback
             def update_progress(message):
-                status_placeholder.info(message)
+                # status_placeholder.info(message)
+                pass
             
             # Execute the query
             response = st.session_state.agent_manager.execute_query(
@@ -435,7 +490,7 @@ def main():
             st.session_state.chat_history.append((query_input.strip(), response))
             
             # Clear status
-            status_placeholder.empty()
+            # status_placeholder.empty()
             
             # Rerun to update the display
             st.rerun()
