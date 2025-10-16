@@ -112,7 +112,7 @@ class StrandsAgentManager:
                         self.github_tools.append(tool)
                 
                 self.mcp_tools_loaded = True
-                logger.info(f"Github tools loaded: {[tool.name for tool in self.github_tools]}")
+                logger.info(f"Github tools loaded: {[tool.tool_name for tool in self.github_tools]}")
                 logger.info("MCP tools loaded successfully")
             except Exception as e:
                 logger.warning(f"Could not load MCP tools: {e}")
