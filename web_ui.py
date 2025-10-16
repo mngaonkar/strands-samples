@@ -236,13 +236,17 @@ When decomposing tasks, consider which tools will be needed and structure sub-ta
         # kubectl command agent
         kubectl_command_agent = Agent(
             name="kubectl_command_agent",
-            system_prompt=self.load_system_prompt("kubectl_command_agent.yaml") or 
+            system_prompt=self.load_system_prompt("system_prompt_kubectl_agent.yaml") or 
                          "You are a Kubernetes command execution agent. Execute kubectl commands safely using the shell tool.",
             model="global.anthropic.claude-sonnet-4-5-20250929-v1:0",
             tools=[shell.shell],
             callback_handler=self.process_event
         )
         
+        # Print system prompt for debugging
+        logger.info("Kubectl Command Agent System Prompt:")
+        logger.info(kubectl_command_agent.system_prompt)
+
         # Task executor agent  
         task_executor = Agent(
             name="task_executor",
