@@ -187,10 +187,22 @@ class StrandsAgentManager:
                 tool_input = event['delta']['current_tool_use']["input"]
                 event_type = "tool_use"
             
-        if "message" in event and "role" in event["message"]:
-            message = json.dumps(event['message'])
-            event_type = "message"
-            print(f"📧 Message: {message}")
+        if "message" in event and "role" in event["message"]:            
+            content_list = []
+            if "content" in event['message']:
+                for item in event['message']['content']:
+                    if 'toolResult' in item and "content" in item["toolResult"]:
+                        for content_item in item["toolResult"]["content"]:
+                            if 'text' in content_item:
+                                content_list.append(f"Tool Result: {content_item['text']}")
+                    elif 'toolUse' in item:
+                        content_list.append(f"Tool Use: {item['toolUse']}")
+                    elif 'text' in item:
+                        content_list.append(f"Message: {item['text']}")
+
+            if content_list:
+                message = f"{event['message']['role']}: " + "\n".join(content_list)
+                event_type = "message"
 
         if event_type in ["message"]:
             self.agent_events.append(
@@ -448,18 +460,42 @@ def main():
             "What time is it and list current directory contents"
         ]
         
+        # Pre-defined query selection
         selected_example = st.selectbox("Choose an example:", [""] + example_queries)
         if selected_example and st.button("Use Example"):
             query_input = selected_example
     
+        # Execute button
+        if st.button("🚀 Execute Query", type="primary") and query_input.strip():
+            with st.spinner('Executing query...'):
+                # Progress callback
+                def update_progress(message):
+                    # status_placeholder.info(message)
+                    pass
+                
+                # Execute the query
+                response = st.session_state.agent_manager.execute_query(
+                    query_input.strip(), 
+                    progress_callback=update_progress
+                )
+                
+                # Add to chat history
+                st.session_state.chat_history.append((query_input.strip(), response))
+                
+                # Clear status
+                # status_placeholder.empty()
+                
+                # Rerun to update the display
+                st.rerun()
+
     with col2:
-        st.subheader("📊 Execution Status")
+        st.subheader("📊 Agent Log")
 
         # Add a scrollable box for events
-        event_box = st.container()
+        event_box = st.container(height=1000)
         with event_box:
             event_box.markdown("### Agent Events")
-            event_box.markdown("<div style='height:300px; overflow-y:auto; border:1px solid #ccc; padding:10px;'>", unsafe_allow_html=True)
+            # event_box.markdown("<div style='height:300px; overflow-y:auto; border:1px solid #ccc; padding:10px;'>", unsafe_allow_html=True)
             for event in st.session_state.agent_manager.agent_events:
                 event_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(event.timestamp))
                 if event.event_type == "message":
@@ -471,30 +507,7 @@ def main():
                 elif event.event_type == "n/a":
                     continue
             event_box.markdown("</div>", unsafe_allow_html=True)
-    
-    # Execute button
-    if st.button("🚀 Execute Query", type="primary") and query_input.strip():
-        with st.spinner('Executing query...'):
-            # Progress callback
-            def update_progress(message):
-                # status_placeholder.info(message)
-                pass
-            
-            # Execute the query
-            response = st.session_state.agent_manager.execute_query(
-                query_input.strip(), 
-                progress_callback=update_progress
-            )
-            
-            # Add to chat history
-            st.session_state.chat_history.append((query_input.strip(), response))
-            
-            # Clear status
-            # status_placeholder.empty()
-            
-            # Rerun to update the display
-            st.rerun()
-    
+        
     # Footer
     st.markdown("---")
     st.markdown("*Powered by Strands Multi-Agent Framework*")
