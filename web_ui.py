@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AgentEvent:
+    """Class for keeping track of an agent event"""
     timestamp: float
     event_type: str
     tool_name: str = ""
@@ -39,6 +40,7 @@ class AgentEvent:
     message: str = ""
 
 class StrandsAgentManager:
+    """Manages the Strands agents and their interactions"""
     def __init__(self):
         self.graph = None
         self.mcp_client_aws_docs = None
