@@ -332,8 +332,9 @@ class StrandsAgentManager:
         # builder.add_edge("kubectl_command_agent", "result_aggregator")
         # builder.set_entry_point("task_decomposer")
 
-        # Set up the workflow for GitHub tasks
-        builder.add_edge("task_decomposer", "github_agent")
+        # Set up the workflow for Kubernetes and GitHub tasks
+        builder.add_edge("task_decomposer", "kubectl_command_agent")
+        builder.add_edge("kubectl_command_agent", "github_agent")
         builder.add_edge("github_agent", "result_aggregator")
         builder.set_entry_point("task_decomposer")
         builder.set_max_node_executions(MAX_NODE_EXECUTIONS)
