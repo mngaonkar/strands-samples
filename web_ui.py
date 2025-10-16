@@ -13,6 +13,8 @@ import plotly.express as px
 import pandas as pd
 from dataclasses import dataclass
 
+MAX_NODE_EXECUTIONS = 25
+
 # Configure page
 st.set_page_config(
     page_title="Strands Agent Interface",
@@ -316,13 +318,20 @@ class StrandsAgentManager:
         builder = GraphBuilder()
         builder.add_node(task_decomposer, "task_decomposer")
         builder.add_node(task_executor, "task_executor")
+        builder.add_node(github_agent, "github_agent")
         builder.add_node(kubectl_command_agent, "kubectl_command_agent")
         builder.add_node(result_aggregator, "result_aggregator")
         
-        # Set up the workflow
-        builder.add_edge("task_decomposer", "kubectl_command_agent")
-        builder.add_edge("kubectl_command_agent", "result_aggregator")
+        # Set up the workflow for kubectl tasks
+        # builder.add_edge("task_decomposer", "kubectl_command_agent")
+        # builder.add_edge("kubectl_command_agent", "result_aggregator")
+        # builder.set_entry_point("task_decomposer")
+
+        # Set up the workflow for GitHub tasks
+        builder.add_edge("task_decomposer", "github_agent")
+        builder.add_edge("github_agent", "result_aggregator")
         builder.set_entry_point("task_decomposer")
+        builder.set_max_node_executions(MAX_NODE_EXECUTIONS)
         
         self.graph = builder.build()
     
@@ -334,9 +343,10 @@ class StrandsAgentManager:
             
             if self.graph is None:
                 raise ValueError("Agent graph not initialized properly")
-            
-            result = self.graph(query)
-            
+
+            with self.mcp_client_github:
+                result = self.graph(query)
+
             if progress_callback:
                 progress_callback("✅ Task execution completed!")
             
