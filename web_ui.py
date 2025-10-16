@@ -42,6 +42,7 @@ class StrandsAgentManager:
         self.mcp_client_aws_docs = None
         self.mcp_client_github = None
         self.all_tools = []
+        self.github_tools = []
         self.agent_events = []
         self._initialize_tools()
         self._build_graph()
@@ -61,52 +62,57 @@ class StrandsAgentManager:
     
     def _initialize_tools(self):
         """Initialize MCP clients and tools"""
-        # AWS documentation MCP client setup
-        self.mcp_client_aws_docs = MCPClient(lambda: stdio_client(
-            StdioServerParameters(
-                command="uvx", 
-                args=["awslabs.aws-documentation-mcp-server@latest"],
-                env={
-                    "AWS_ACCESS_KEY_ID": os.getenv("AWS_ACCESS_KEY_ID", ""),
-                    "AWS_SECRET_ACCESS_KEY": os.getenv("AWS_SECRET_ACCESS_KEY", ""),
-                    "AWS_DEFAULT_REGION": os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-                }
-            )
-        ))
-        
-        # GitHub MCP client setup
-        self.mcp_client_github = MCPClient(lambda: stdio_client(
-            StdioServerParameters(
-                command="npx", 
-                args=["-y", "@modelcontextprotocol/server-github"],
-                env={
-                    "GITHUB_PERSONAL_ACCESS_TOKEN": os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN", "")
-                }
-            )
-        ))
-        
         # Basic tools
         self.all_tools = [calculator, current_time, use_aws, shell.shell]
         
-        # Add MCP tools (optional - loaded only if environment is configured)
+        # Load AWS docs MCP tools (optional - loaded only if environment is configured)
         self.mcp_tools_loaded = False
-        if os.getenv("AWS_ACCESS_KEY_ID") or os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN"):
+        if os.getenv("AWS_ACCESS_KEY_ID"):
             try:
                 # Load AWS MCP tools if AWS is configured
                 if os.getenv("AWS_ACCESS_KEY_ID"):
+                    # AWS documentation MCP client setup
+                    self.mcp_client_aws_docs = MCPClient(lambda: stdio_client(
+                        StdioServerParameters(
+                            command="uvx", 
+                            args=["awslabs.aws-documentation-mcp-server@latest"],
+                            env={
+                                "AWS_ACCESS_KEY_ID": os.getenv("AWS_ACCESS_KEY_ID", ""),
+                                "AWS_SECRET_ACCESS_KEY": os.getenv("AWS_SECRET_ACCESS_KEY", ""),
+                                "AWS_DEFAULT_REGION": os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+                            }
+                        )
+                    ))
                     with self.mcp_client_aws_docs:
                         aws_tools = self.mcp_client_aws_docs.list_tools_sync()
                         for tool in aws_tools:
                             self.all_tools.append(tool)
+            except Exception as e:
+                logger.warning(f"Could not load AWS MCP tools: {e}")
+                self.mcp_tools_loaded = False
                 
+        # Load GitHub MCP tools if GitHub is configured
+        if os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN"):
+            try:
+                # GitHub MCP client setup
+                self.mcp_client_github = MCPClient(lambda: stdio_client(
+                    StdioServerParameters(
+                        command="npx", 
+                        args=["-y", "@modelcontextprotocol/server-github"],
+                        env={
+                            "GITHUB_PERSONAL_ACCESS_TOKEN": os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN", "")
+                        }
+                    )
+                ))
+
                 # Load GitHub MCP tools if GitHub is configured  
-                if os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN"):
-                    with self.mcp_client_github:
-                        github_tools = self.mcp_client_github.list_tools_sync()  
-                        for tool in github_tools:
-                            self.all_tools.append(tool)
+                with self.mcp_client_github:
+                    tools = self.mcp_client_github.list_tools_sync()  
+                    for tool in tools:
+                        self.github_tools.append(tool)
                 
                 self.mcp_tools_loaded = True
+                logger.info(f"Github tools loaded: {[tool.name for tool in self.github_tools]}")
                 logger.info("MCP tools loaded successfully")
             except Exception as e:
                 logger.warning(f"Could not load MCP tools: {e}")
@@ -219,16 +225,16 @@ class StrandsAgentManager:
             name="task_decomposer",
             system_prompt='''You are a task decomposition agent. Break down complex tasks into simpler sub-tasks that can be executed using available tools.
 
-Available tools for execution:
-- AWS operations (use_aws tool)
-- GitHub operations (GitHub MCP tools)  
-- Shell/Bash commands (shell tool) - for kubectl, docker, git, file operations, etc.
-- Mathematical calculations (calculator tool)
-- Time operations (current_time tool)
+                Available tools for execution:
+                - AWS operations (use_aws tool)
+                - GitHub operations (GitHub MCP tools)  
+                - Shell/Bash commands (shell tool) - for kubectl, docker, git, file operations, etc.
+                - Mathematical calculations (calculator tool)
+                - Time operations (current_time tool)
 
-The output should be a JSON array with content as {"index": <task index>, "task_name": <task name>, "task_description": <task description>}.
+                The output should be a JSON array with content as {"index": <task index>, "task_name": <task name>, "task_description": <task description>}.
 
-When decomposing tasks, consider which tools will be needed and structure sub-tasks accordingly.''',
+                When decomposing tasks, consider which tools will be needed and structure sub-tasks accordingly.''',
             model="global.anthropic.claude-sonnet-4-5-20250929-v1:0",
             tools=[]
         )
@@ -246,6 +252,15 @@ When decomposing tasks, consider which tools will be needed and structure sub-ta
         # Print system prompt for debugging
         logger.info("Kubectl Command Agent System Prompt:")
         logger.info(kubectl_command_agent.system_prompt)
+
+        # GitHub operations agent
+        github_agent = Agent(
+            name="github_agent",
+            system_prompt="You are a GitHub operations agent. Use GitHub MCP tools to interact with GitHub repositories, issues, pull requests, and more.",
+            model="global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            tools=[self.github_tools] if self.github_tools else [],
+            callback_handler=self.process_event
+        )
 
         # Task executor agent  
         task_executor = Agent(
